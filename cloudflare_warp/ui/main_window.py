@@ -28,6 +28,7 @@ class ToggleButton(QWidget):
 
     clicked = Signal()
     _ANIM_INTERVAL_MS = 25
+    _ANIM_PHASE_STEP = 0.035     # phase increment per tick (controls spin speed)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -104,7 +105,7 @@ class ToggleButton(QWidget):
 
     # -- internal ----------------------------------------------------------
     def _tick(self):
-        self._anim_phase = (self._anim_phase + 0.035) % 1.0
+        self._anim_phase = (self._anim_phase + self._ANIM_PHASE_STEP) % 1.0
         self.update()
 
     def paintEvent(self, _event):
@@ -475,8 +476,8 @@ class MainWindow(QMainWindow):
         bottom_layout.setContentsMargins(16, 10, 16, 10)
 
         # Account type badge
-        acct = self._cfg.get("account_type", "free").upper()
-        badge_text = "WARP+" if acct == "WARP_PLUS" else "WARP Free"
+        acct = self._cfg.get("account_type", "free")
+        badge_text = "WARP+" if acct == "warp_plus" else "WARP Free"
         self._acct_label = QLabel(badge_text)
         self._acct_label.setFont(QFont(T.FONT_FAMILY, T.FONT_SMALL_SIZE, QFont.Weight.Bold))
         self._acct_label.setStyleSheet(f"color: {T.ORANGE}; background: transparent;")

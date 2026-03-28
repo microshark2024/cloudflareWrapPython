@@ -10,7 +10,8 @@ BG_CARD = "#242535"          # card / secondary surface
 BG_HOVER = "#2e2f47"         # hover state
 
 ORANGE = "#f48120"           # Cloudflare brand orange
-ORANGE_DARK = "#d06a10"      # pressed/active state
+ORANGE_DARK = "#d06a10"      # hover/active state
+ORANGE_PRESSED = "#b05a08"   # deep press state
 
 CONNECTED_BLUE = "#00aee0"   # toggle glow when connected
 CONNECTING_YELLOW = "#f5a623"

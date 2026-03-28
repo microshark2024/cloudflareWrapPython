@@ -151,7 +151,7 @@ class SettingsDialog(QDialog):
                 background-color: {T.ORANGE_DARK};
             }}
             QPushButton:pressed {{
-                background-color: #b05a08;
+                background-color: {T.ORANGE_PRESSED};
             }}
         """)
         save_btn.clicked.connect(self._save)
