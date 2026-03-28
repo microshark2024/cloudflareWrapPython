@@ -1,25 +1,26 @@
 # Cloudflare WARP – Python Desktop Client
 
-A Python/Tkinter desktop application that replicates the **Cloudflare WARP** Windows client UI and functionality.
+A Python/Qt (PySide6) desktop application that replicates the **Cloudflare WARP** Windows client UI and functionality with pixel-perfect fidelity.
 
 ## Features
 
 | Feature | Description |
 |---------|-------------|
 | **Connect / Disconnect** | Toggle WARP with an animated circular power button |
-| **Live status** | Animated glow ring (orange = disconnected, blue = connected, pulsing = in-progress) |
+| **Live status** | QPainter-rendered glow ring (orange = disconnected, blue = connected, pulsing = in-progress) |
+| **Click effects** | Press-shrink animation on the toggle button, hover highlights on all interactive elements |
+| **Screen positioning** | Window appears in the bottom-right corner of the screen (near system tray) matching real Cloudflare WARP |
 | **Connection info card** | Shows your tunnelled IP, location and Cloudflare data-centre once connected |
-| **Settings dialog** | General preferences, DNS mode, split-tunnel IP list, account type |
-| **System-tray icon** | Minimise to tray; right-click menu for quick connect/disconnect/quit |
+| **Settings dialog** | General preferences, DNS mode, split-tunnel IP list, account type with custom-styled tabs and controls |
+| **System-tray icon** | Qt QSystemTrayIcon; double-click to show, right-click menu for quick connect/disconnect/quit |
 | **Real warp-cli support** | Calls the official `warp-cli` binary when it is installed |
 | **Simulation fallback** | Works fully in demo mode when warp-cli is absent |
 
 ## Requirements
 
 - Python 3.10+
+- [PySide6](https://doc.qt.io/qtforpython/) ≥ 6.5
 - [Pillow](https://python-pillow.org/) ≥ 10.0
-- [pystray](https://github.com/moses-palmer/pystray) ≥ 0.19
-- Tkinter (bundled with CPython on Windows; install `python3-tk` on Linux)
 
 ## Installation
 
@@ -50,8 +51,8 @@ cloudflare_warp/
 └── ui/
     ├── main_window.py      # Main window (toggle button, status, info card)
     ├── settings_dialog.py  # Settings modal dialog
-    ├── tray_icon.py        # System-tray icon (pystray)
-    └── theme.py            # Design tokens (colours, fonts, sizes)
+    ├── tray_icon.py        # System-tray icon (Qt QSystemTrayIcon)
+    └── theme.py            # Design tokens (colours, fonts, sizes, utilities)
 run.py                      # Top-level launcher
 requirements.txt
 setup.py

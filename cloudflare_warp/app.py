@@ -3,6 +3,9 @@
 import sys
 from typing import Optional
 
+from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QTimer
+
 from cloudflare_warp.core.warp_service import WarpService
 from cloudflare_warp.core.config import Config
 from cloudflare_warp.ui.main_window import MainWindow
@@ -15,8 +18,12 @@ class App:
         self._svc = WarpService()
         self._window: Optional[MainWindow] = None
         self._tray: Optional[TrayIcon] = None
+        self._qt_app: Optional[QApplication] = None
 
     def run(self):
+        # Create the QApplication (must exist before any widgets)
+        self._qt_app = QApplication.instance() or QApplication(sys.argv)
+
         # Initial status poll (no-op when no real CLI)
         self._svc.refresh_status()
 
@@ -24,7 +31,7 @@ class App:
         start_min = self._cfg.get("start_minimized", False)
         self._window = MainWindow(self._svc, self._cfg)
 
-        # System tray (best-effort; silently skipped if pystray unavailable)
+        # System tray
         self._tray = TrayIcon(
             warp_service=self._svc,
             show_window_callback=self._show_window,
@@ -33,12 +40,12 @@ class App:
         self._tray.start()
 
         if start_min:
-            self._window.withdraw()
+            self._window.hide()
+        else:
+            self._window.show()
 
-        # Override window close to minimise-to-tray
-        self._window.protocol("WM_DELETE_WINDOW", self._on_window_close)
-
-        self._window.mainloop()
+        # Enter the Qt event loop
+        sys.exit(self._qt_app.exec())
 
     # ------------------------------------------------------------------
     # Callbacks
@@ -46,15 +53,12 @@ class App:
 
     def _show_window(self):
         if self._window:
-            self._window.after(0, self._window.deiconify)
-            self._window.after(0, self._window.lift)
-
-    def _on_window_close(self):
-        self._window.withdraw()
+            QTimer.singleShot(0, self._window.show)
+            QTimer.singleShot(0, self._window.raise_)
+            QTimer.singleShot(0, self._window.activateWindow)
 
     def _quit(self):
         if self._tray:
             self._tray.stop()
-        if self._window:
-            self._window.after(0, self._window.destroy)
-        sys.exit(0)
+        if self._qt_app:
+            self._qt_app.quit()
