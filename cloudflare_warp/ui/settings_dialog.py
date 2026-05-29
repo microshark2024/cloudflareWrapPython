@@ -1,27 +1,102 @@
-"""Settings dialog – mirrors Cloudflare WARP preferences panel."""
+"""Settings dialog – mirrors Cloudflare WARP preferences panel using Qt."""
 
-import tkinter as tk
-from tkinter import ttk
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QCursor
+from PySide6.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTabWidget,
+    QWidget, QCheckBox, QRadioButton, QButtonGroup, QTextEdit,
+    QPushButton, QFrame, QSizePolicy,
+)
 
 from cloudflare_warp.core.warp_service import WarpService, WarpStatus
 from cloudflare_warp.core.config import Config
 from . import theme as T
 
 
-class SettingsDialog(tk.Toplevel):
-    """Modal settings window."""
+# ---------------------------------------------------------------------------
+# Shared QSS snippets
+# ---------------------------------------------------------------------------
+
+_TAB_QSS = f"""
+QTabWidget::pane {{
+    border: none;
+    background-color: {T.BG_DARK};
+}}
+QTabBar::tab {{
+    background: {T.BG_CARD};
+    color: {T.TEXT_SECONDARY};
+    padding: 6px 14px;
+    border: none;
+    font-size: {T.FONT_BODY_SIZE}pt;
+}}
+QTabBar::tab:selected {{
+    background: {T.BG_DARK};
+    color: {T.TEXT_PRIMARY};
+}}
+QTabBar::tab:hover {{
+    color: {T.TEXT_PRIMARY};
+}}
+"""
+
+_CHECKBOX_QSS = f"""
+QCheckBox {{
+    color: {T.TEXT_PRIMARY};
+    spacing: 8px;
+    font-size: {T.FONT_BODY_SIZE}pt;
+    background: transparent;
+}}
+QCheckBox::indicator {{
+    width: 16px;
+    height: 16px;
+    border: 2px solid {T.TEXT_SECONDARY};
+    border-radius: 3px;
+    background: {T.BG_CARD};
+}}
+QCheckBox::indicator:checked {{
+    background: {T.ORANGE};
+    border-color: {T.ORANGE};
+}}
+QCheckBox::indicator:hover {{
+    border-color: {T.TEXT_PRIMARY};
+}}
+"""
+
+_RADIO_QSS = f"""
+QRadioButton {{
+    color: {T.TEXT_PRIMARY};
+    spacing: 8px;
+    font-size: {T.FONT_BODY_SIZE}pt;
+    background: transparent;
+}}
+QRadioButton::indicator {{
+    width: 14px;
+    height: 14px;
+    border: 2px solid {T.TEXT_SECONDARY};
+    border-radius: 9px;
+    background: {T.BG_CARD};
+}}
+QRadioButton::indicator:checked {{
+    background: {T.ORANGE};
+    border-color: {T.ORANGE};
+}}
+QRadioButton::indicator:hover {{
+    border-color: {T.TEXT_PRIMARY};
+}}
+"""
+
+
+class SettingsDialog(QDialog):
+    """Modal settings window styled like Cloudflare WARP preferences."""
 
     def __init__(self, parent, warp_service: WarpService, config: Config):
         super().__init__(parent)
         self._svc = warp_service
         self._cfg = config
 
-        self.title("WARP Settings")
-        self.geometry("380x520")
-        self.resizable(False, False)
-        self.configure(bg=T.BG_DARK)
-        self.transient(parent)
-        self.grab_set()
+        self.setWindowTitle("WARP Settings")
+        self.setFixedSize(380, 520)
+        self.setStyleSheet(f"QDialog {{ background-color: {T.BG_DARK}; }}")
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
 
         self._build()
         self._load_values()
@@ -31,178 +106,260 @@ class SettingsDialog(tk.Toplevel):
     # ------------------------------------------------------------------
 
     def _build(self):
-        # Title bar
-        title = tk.Label(self, text="Settings", font=T.FONT_TITLE,
-                         fg=T.TEXT_PRIMARY, bg=T.BG_DARK)
-        title.pack(pady=(20, 0), padx=20, anchor="w")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 16)
+        layout.setSpacing(0)
 
-        tk.Frame(self, bg=T.SEPARATOR, height=1).pack(fill="x", padx=20, pady=12)
+        # Title
+        title = QLabel("Settings")
+        title.setFont(QFont(T.FONT_FAMILY, T.FONT_TITLE_SIZE, QFont.Weight.Bold))
+        title.setStyleSheet(f"color: {T.TEXT_PRIMARY}; background: transparent;")
+        layout.addWidget(title)
 
-        # Notebook (tabs)
-        style = ttk.Style(self)
-        style.theme_use("default")
-        style.configure("Custom.TNotebook", background=T.BG_DARK, borderwidth=0)
-        style.configure("Custom.TNotebook.Tab",
-                         background=T.BG_CARD, foreground=T.TEXT_SECONDARY,
-                         padding=(14, 6), font=T.FONT_BODY)
-        style.map("Custom.TNotebook.Tab",
-                  background=[("selected", T.BG_DARK)],
-                  foreground=[("selected", T.TEXT_PRIMARY)])
+        sep = QFrame()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet(f"background-color: {T.SEPARATOR}; margin-top: 12px; margin-bottom: 12px;")
+        layout.addWidget(sep)
 
-        nb = ttk.Notebook(self, style="Custom.TNotebook")
-        nb.pack(fill="both", expand=True, padx=16, pady=0)
+        # Tab widget
+        self._tabs = QTabWidget()
+        self._tabs.setStyleSheet(_TAB_QSS)
+        layout.addWidget(self._tabs, stretch=1)
 
-        self._build_general_tab(nb)
-        self._build_dns_tab(nb)
-        self._build_split_tunnel_tab(nb)
-        self._build_account_tab(nb)
+        self._build_general_tab()
+        self._build_dns_tab()
+        self._build_split_tunnel_tab()
+        self._build_account_tab()
 
-        # Save / Cancel
-        btn_frame = tk.Frame(self, bg=T.BG_DARK)
-        btn_frame.pack(fill="x", padx=20, pady=16)
+        # Button row
+        btn_row = QHBoxLayout()
+        btn_row.setContentsMargins(0, 16, 0, 0)
+        btn_row.addStretch()
 
-        cancel_btn = tk.Button(
-            btn_frame, text="Cancel", font=T.FONT_BODY,
-            bg=T.BG_CARD, fg=T.TEXT_SECONDARY, relief="flat",
-            activebackground=T.BG_HOVER, activeforeground=T.TEXT_PRIMARY,
-            cursor="hand2", command=self.destroy, padx=14, pady=6,
-        )
-        cancel_btn.pack(side="right", padx=(6, 0))
+        save_btn = QPushButton("Save")
+        save_btn.setFont(QFont(T.FONT_FAMILY, T.FONT_BODY_SIZE, QFont.Weight.Bold))
+        save_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        save_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {T.ORANGE};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 14px;
+            }}
+            QPushButton:hover {{
+                background-color: {T.ORANGE_DARK};
+            }}
+            QPushButton:pressed {{
+                background-color: {T.ORANGE_PRESSED};
+            }}
+        """)
+        save_btn.clicked.connect(self._save)
 
-        save_btn = tk.Button(
-            btn_frame, text="Save", font=(T.FONT_FAMILY, 11, "bold"),
-            bg=T.ORANGE, fg="white", relief="flat",
-            activebackground=T.ORANGE_DARK, activeforeground="white",
-            cursor="hand2", command=self._save, padx=14, pady=6,
-        )
-        save_btn.pack(side="right")
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setFont(QFont(T.FONT_FAMILY, T.FONT_BODY_SIZE))
+        cancel_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        cancel_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {T.BG_CARD};
+                color: {T.TEXT_SECONDARY};
+                border: none;
+                border-radius: 4px;
+                padding: 6px 14px;
+            }}
+            QPushButton:hover {{
+                background-color: {T.BG_HOVER};
+                color: {T.TEXT_PRIMARY};
+            }}
+        """)
+        cancel_btn.clicked.connect(self.reject)
 
-    def _build_general_tab(self, nb):
-        frame = self._tab_frame(nb, "General")
+        btn_row.addWidget(save_btn)
+        btn_row.addWidget(cancel_btn)
+        layout.addLayout(btn_row)
 
-        self._start_minimized_var = tk.BooleanVar()
-        self._start_on_login_var = tk.BooleanVar()
-        self._show_notif_var = tk.BooleanVar()
+    # -- tabs -------------------------------------------------------------
 
-        _checkbox(frame, "Start minimized", self._start_minimized_var)
-        _checkbox(frame, "Launch at startup", self._start_on_login_var)
-        _checkbox(frame, "Show notifications", self._show_notif_var)
+    def _build_general_tab(self):
+        page = self._tab_page("General")
+        layout = page.layout()
 
-    def _build_dns_tab(self, nb):
-        frame = self._tab_frame(nb, "DNS")
+        self._start_minimized_cb = QCheckBox("Start minimized")
+        self._start_on_login_cb = QCheckBox("Launch at startup")
+        self._show_notif_cb = QCheckBox("Show notifications")
 
-        tk.Label(frame, text="DNS mode", font=T.FONT_BODY,
-                 fg=T.TEXT_SECONDARY, bg=T.BG_DARK).pack(anchor="w", pady=(0, 6))
+        for cb in (self._start_minimized_cb, self._start_on_login_cb, self._show_notif_cb):
+            cb.setStyleSheet(_CHECKBOX_QSS)
+            cb.setFont(QFont(T.FONT_FAMILY, T.FONT_BODY_SIZE))
+            layout.addWidget(cb)
 
-        self._dns_var = tk.StringVar()
+        layout.addStretch()
+
+    def _build_dns_tab(self):
+        page = self._tab_page("DNS")
+        layout = page.layout()
+
+        heading = QLabel("DNS mode")
+        heading.setFont(QFont(T.FONT_FAMILY, T.FONT_BODY_SIZE))
+        heading.setStyleSheet(f"color: {T.TEXT_SECONDARY}; background: transparent; padding-bottom: 6px;")
+        layout.addWidget(heading)
+
+        self._dns_group = QButtonGroup(self)
         modes = [
             ("WARP (recommended)", "warp"),
             ("DNS over HTTPS (DoH)", "doh"),
             ("DNS over TLS (DoT)", "dot"),
             ("Off", "off"),
         ]
+        self._dns_radios = {}
         for label, value in modes:
-            _radio(frame, label, self._dns_var, value)
+            rb = QRadioButton(label)
+            rb.setStyleSheet(_RADIO_QSS)
+            rb.setFont(QFont(T.FONT_FAMILY, T.FONT_BODY_SIZE))
+            self._dns_group.addButton(rb)
+            self._dns_radios[value] = rb
+            layout.addWidget(rb)
 
-    def _build_split_tunnel_tab(self, nb):
-        frame = self._tab_frame(nb, "Split Tunnel")
+        layout.addStretch()
 
-        tk.Label(frame, text="Mode", font=T.FONT_BODY,
-                 fg=T.TEXT_SECONDARY, bg=T.BG_DARK).pack(anchor="w", pady=(0, 6))
+    def _build_split_tunnel_tab(self):
+        page = self._tab_page("Split Tunnel")
+        layout = page.layout()
 
-        self._tunnel_mode_var = tk.StringVar()
-        _radio(frame, "Exclude IPs from WARP", self._tunnel_mode_var, "exclude")
-        _radio(frame, "Include only these IPs in WARP", self._tunnel_mode_var, "include")
+        heading = QLabel("Mode")
+        heading.setFont(QFont(T.FONT_FAMILY, T.FONT_BODY_SIZE))
+        heading.setStyleSheet(f"color: {T.TEXT_SECONDARY}; background: transparent; padding-bottom: 6px;")
+        layout.addWidget(heading)
 
-        tk.Label(frame, text="IP ranges (one per line)",
-                 font=T.FONT_SMALL, fg=T.TEXT_SECONDARY, bg=T.BG_DARK).pack(
-            anchor="w", pady=(12, 4))
-        self._ips_text = tk.Text(
-            frame, height=6, bg=T.BG_CARD, fg=T.TEXT_PRIMARY,
-            insertbackground=T.TEXT_PRIMARY, font=(T.FONT_FAMILY, 10),
-            relief="flat", padx=6, pady=6,
-        )
-        self._ips_text.pack(fill="x")
+        self._tunnel_group = QButtonGroup(self)
+        self._tunnel_radios = {}
+        for label, value in [
+            ("Exclude IPs from WARP", "exclude"),
+            ("Include only these IPs in WARP", "include"),
+        ]:
+            rb = QRadioButton(label)
+            rb.setStyleSheet(_RADIO_QSS)
+            rb.setFont(QFont(T.FONT_FAMILY, T.FONT_BODY_SIZE))
+            self._tunnel_group.addButton(rb)
+            self._tunnel_radios[value] = rb
+            layout.addWidget(rb)
 
-    def _build_account_tab(self, nb):
-        frame = self._tab_frame(nb, "Account")
+        ip_heading = QLabel("IP ranges (one per line)")
+        ip_heading.setFont(QFont(T.FONT_FAMILY, T.FONT_SMALL_SIZE))
+        ip_heading.setStyleSheet(f"color: {T.TEXT_SECONDARY}; background: transparent; padding-top: 12px; padding-bottom: 4px;")
+        layout.addWidget(ip_heading)
 
-        tk.Label(frame, text="Account type", font=T.FONT_BODY,
-                 fg=T.TEXT_SECONDARY, bg=T.BG_DARK).pack(anchor="w", pady=(0, 6))
+        self._ips_text = QTextEdit()
+        self._ips_text.setMaximumHeight(120)
+        self._ips_text.setFont(QFont(T.FONT_FAMILY, 10))
+        self._ips_text.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {T.BG_CARD};
+                color: {T.TEXT_PRIMARY};
+                border: none;
+                border-radius: 4px;
+                padding: 6px;
+            }}
+        """)
+        layout.addWidget(self._ips_text)
+        layout.addStretch()
 
-        self._acct_var = tk.StringVar()
-        _radio(frame, "WARP (free)", self._acct_var, "free")
-        _radio(frame, "WARP+ (paid)", self._acct_var, "warp_plus")
+    def _build_account_tab(self):
+        page = self._tab_page("Account")
+        layout = page.layout()
+
+        heading = QLabel("Account type")
+        heading.setFont(QFont(T.FONT_FAMILY, T.FONT_BODY_SIZE))
+        heading.setStyleSheet(f"color: {T.TEXT_SECONDARY}; background: transparent; padding-bottom: 6px;")
+        layout.addWidget(heading)
+
+        self._acct_group = QButtonGroup(self)
+        self._acct_radios = {}
+        for label, value in [("WARP (free)", "free"), ("WARP+ (paid)", "warp_plus")]:
+            rb = QRadioButton(label)
+            rb.setStyleSheet(_RADIO_QSS)
+            rb.setFont(QFont(T.FONT_FAMILY, T.FONT_BODY_SIZE))
+            self._acct_group.addButton(rb)
+            self._acct_radios[value] = rb
+            layout.addWidget(rb)
 
         # Status indicator
         connected = self._svc.status == WarpStatus.CONNECTED
         status_color = T.SUCCESS_GREEN if connected else T.ERROR_RED
         status_text = "Connected" if connected else "Not connected"
-        tk.Label(frame, text=f"Status: {status_text}", font=T.FONT_BODY,
-                 fg=status_color, bg=T.BG_DARK).pack(anchor="w", pady=(20, 0))
+        status_lbl = QLabel(f"Status: {status_text}")
+        status_lbl.setFont(QFont(T.FONT_FAMILY, T.FONT_BODY_SIZE))
+        status_lbl.setStyleSheet(f"color: {status_color}; background: transparent; padding-top: 20px;")
+        layout.addWidget(status_lbl)
 
-        # Version info
+        # Version
         from cloudflare_warp import __version__
-        tk.Label(frame, text=f"Version {__version__}", font=T.FONT_SMALL,
-                 fg=T.TEXT_MUTED, bg=T.BG_DARK).pack(anchor="w", pady=(8, 0))
+        ver_lbl = QLabel(f"Version {__version__}")
+        ver_lbl.setFont(QFont(T.FONT_FAMILY, T.FONT_SMALL_SIZE))
+        ver_lbl.setStyleSheet(f"color: {T.TEXT_MUTED}; background: transparent; padding-top: 8px;")
+        layout.addWidget(ver_lbl)
+
+        layout.addStretch()
 
     # ------------------------------------------------------------------
     # Values
     # ------------------------------------------------------------------
 
     def _load_values(self):
-        self._start_minimized_var.set(self._cfg.get("start_minimized", False))
-        self._start_on_login_var.set(self._cfg.get("start_on_login", False))
-        self._show_notif_var.set(self._cfg.get("show_notifications", True))
-        self._dns_var.set(self._cfg.get("dns_mode", "warp"))
-        self._tunnel_mode_var.set(self._cfg.get("split_tunnel_mode", "exclude"))
-        self._acct_var.set(self._cfg.get("account_type", "free"))
+        self._start_minimized_cb.setChecked(self._cfg.get("start_minimized", False))
+        self._start_on_login_cb.setChecked(self._cfg.get("start_on_login", False))
+        self._show_notif_cb.setChecked(self._cfg.get("show_notifications", True))
+
+        dns_mode = self._cfg.get("dns_mode", "warp")
+        if dns_mode in self._dns_radios:
+            self._dns_radios[dns_mode].setChecked(True)
+
+        tunnel_mode = self._cfg.get("split_tunnel_mode", "exclude")
+        if tunnel_mode in self._tunnel_radios:
+            self._tunnel_radios[tunnel_mode].setChecked(True)
+
+        acct = self._cfg.get("account_type", "free")
+        if acct in self._acct_radios:
+            self._acct_radios[acct].setChecked(True)
 
         ips = self._cfg.get("split_tunnel_ips", [])
-        self._ips_text.insert("1.0", "\n".join(ips))
+        self._ips_text.setPlainText("\n".join(ips))
 
     def _save(self):
-        self._cfg.set("start_minimized", self._start_minimized_var.get())
-        self._cfg.set("start_on_login", self._start_on_login_var.get())
-        self._cfg.set("show_notifications", self._show_notif_var.get())
-        self._cfg.set("dns_mode", self._dns_var.get())
-        self._cfg.set("split_tunnel_mode", self._tunnel_mode_var.get())
-        self._cfg.set("account_type", self._acct_var.get())
+        self._cfg.set("start_minimized", self._start_minimized_cb.isChecked())
+        self._cfg.set("start_on_login", self._start_on_login_cb.isChecked())
+        self._cfg.set("show_notifications", self._show_notif_cb.isChecked())
 
-        raw_ips = self._ips_text.get("1.0", tk.END).strip()
+        for value, rb in self._dns_radios.items():
+            if rb.isChecked():
+                self._cfg.set("dns_mode", value)
+                break
+
+        for value, rb in self._tunnel_radios.items():
+            if rb.isChecked():
+                self._cfg.set("split_tunnel_mode", value)
+                break
+
+        for value, rb in self._acct_radios.items():
+            if rb.isChecked():
+                self._cfg.set("account_type", value)
+                break
+
+        raw_ips = self._ips_text.toPlainText().strip()
         ips = [ip.strip() for ip in raw_ips.splitlines() if ip.strip()]
         self._cfg.set("split_tunnel_ips", ips)
-        self.destroy()
+
+        self.accept()
 
     # ------------------------------------------------------------------
     # Helper
     # ------------------------------------------------------------------
 
-    def _tab_frame(self, nb, label) -> tk.Frame:
-        f = tk.Frame(nb, bg=T.BG_DARK, padx=16, pady=14)
-        nb.add(f, text=label)
-        return f
-
-
-# ---------------------------------------------------------------------------
-# Convenience widget constructors
-# ---------------------------------------------------------------------------
-
-def _checkbox(parent, text, var):
-    cb = tk.Checkbutton(
-        parent, text=text, variable=var,
-        font=T.FONT_BODY, fg=T.TEXT_PRIMARY, bg=T.BG_DARK,
-        selectcolor=T.BG_CARD, activebackground=T.BG_DARK,
-        activeforeground=T.TEXT_PRIMARY, relief="flat",
-    )
-    cb.pack(anchor="w", pady=4)
-
-
-def _radio(parent, text, var, value):
-    rb = tk.Radiobutton(
-        parent, text=text, variable=var, value=value,
-        font=T.FONT_BODY, fg=T.TEXT_PRIMARY, bg=T.BG_DARK,
-        selectcolor=T.BG_CARD, activebackground=T.BG_DARK,
-        activeforeground=T.TEXT_PRIMARY, relief="flat",
-    )
-    rb.pack(anchor="w", pady=2)
+    def _tab_page(self, label) -> QWidget:
+        page = QWidget()
+        page.setStyleSheet(f"background-color: {T.BG_DARK};")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(4)
+        self._tabs.addTab(page, label)
+        return page
