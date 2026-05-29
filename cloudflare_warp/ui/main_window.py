@@ -253,12 +253,16 @@ class MainWindow(tk.Tk):
         self._cfg = config
 
         self.title(T.WINDOW_TITLE)
-        self.geometry(f"{T.WINDOW_WIDTH}x{T.WINDOW_HEIGHT}")
         self.resizable(False, False)
         self.configure(bg=T.BG_DARK)
 
-        # On close: minimise to tray (handled in app.py)
-        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        # Popup behaviour: remove OS title bar and taskbar entry
+        self.overrideredirect(True)
+        self._position_popup()
+
+        # Auto-hide when the application loses focus to another window
+        self.bind("<FocusOut>", self._on_focus_out)
+        self._hide_check_id = None
 
         self._build_ui()
         self._svc.add_status_callback(self._on_status_change)
@@ -369,6 +373,28 @@ class MainWindow(tk.Tk):
         self._conn_label.pack(side="right", padx=(0, 4), pady=10)
 
     # ------------------------------------------------------------------
+    # Popup positioning & visibility
+    # ------------------------------------------------------------------
+
+    def _position_popup(self):
+        """Position the window at the bottom-right corner near the system tray."""
+        self.update_idletasks()
+        w = T.WINDOW_WIDTH
+        h = T.WINDOW_HEIGHT
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        x = sw - w - 20
+        y = sh - h - 60
+        self.geometry(f"{w}x{h}+{x}+{y}")
+
+    def show_popup(self):
+        """Show the popup window positioned near the system tray."""
+        self._position_popup()
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+
+    # ------------------------------------------------------------------
     # Event handlers
     # ------------------------------------------------------------------
 
@@ -382,10 +408,19 @@ class MainWindow(tk.Tk):
         # Must update GUI from the main thread
         self.after(0, self._refresh_display, new_status)
 
-    def _on_close(self):
-        # Minimise to tray (tray icon is set up in app.py);
-        # if no tray support, destroy.
-        self.withdraw()
+    def _on_focus_out(self, _event):
+        """Schedule a check to auto-hide when focus leaves the application."""
+        if self._hide_check_id is not None:
+            self.after_cancel(self._hide_check_id)
+        self._hide_check_id = self.after(200, self._check_focus_and_hide)
+
+    def _check_focus_and_hide(self):
+        """Hide the popup if no widget in this application has focus."""
+        self._hide_check_id = None
+        if not self.winfo_ismapped():
+            return
+        if self.focus_get() is None:
+            self.withdraw()
 
     def _open_settings(self, _event=None):
         from cloudflare_warp.ui.settings_dialog import SettingsDialog

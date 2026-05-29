@@ -21,7 +21,6 @@ class App:
         self._svc.refresh_status()
 
         # Main window
-        start_min = self._cfg.get("start_minimized", False)
         self._window = MainWindow(self._svc, self._cfg)
 
         # System tray (best-effort; silently skipped if pystray unavailable)
@@ -32,11 +31,8 @@ class App:
         )
         self._tray.start()
 
-        if start_min:
-            self._window.withdraw()
-
-        # Override window close to minimise-to-tray
-        self._window.protocol("WM_DELETE_WINDOW", self._on_window_close)
+        # Popup behaviour: always start hidden; tray icon click reveals the window
+        self._window.withdraw()
 
         self._window.mainloop()
 
@@ -46,11 +42,7 @@ class App:
 
     def _show_window(self):
         if self._window:
-            self._window.after(0, self._window.deiconify)
-            self._window.after(0, self._window.lift)
-
-    def _on_window_close(self):
-        self._window.withdraw()
+            self._window.after(0, self._window.show_popup)
 
     def _quit(self):
         if self._tray:
