@@ -356,12 +356,17 @@ class MainWindow(QMainWindow):
         self._svc = warp_service
         self._cfg = config
 
-        self.setWindowTitle(T.WINDOW_TITLE)
-        self.setFixedSize(T.WINDOW_WIDTH, T.WINDOW_HEIGHT)
-        self.setStyleSheet(f"QMainWindow {{ background-color: {T.BG_DARK}; }}")
+        self.title(T.WINDOW_TITLE)
+        self.resizable(False, False)
+        self.configure(bg=T.BG_DARK)
 
-        # Position bottom-right (near system tray) like real Cloudflare WARP
-        self._position_near_tray()
+        # Popup behaviour: remove OS title bar and taskbar entry
+        self.overrideredirect(True)
+        self._position_popup()
+
+        # Auto-hide when the application loses focus to another window
+        self.bind("<FocusOut>", self._on_focus_out)
+        self._hide_check_id = None
 
         self._build_ui()
         self._svc.add_status_callback(self._on_status_change)
@@ -513,6 +518,28 @@ class MainWindow(QMainWindow):
         self.move(x, y)
 
     # ------------------------------------------------------------------
+    # Popup positioning & visibility
+    # ------------------------------------------------------------------
+
+    def _position_popup(self):
+        """Position the window at the bottom-right corner near the system tray."""
+        self.update_idletasks()
+        w = T.WINDOW_WIDTH
+        h = T.WINDOW_HEIGHT
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        x = sw - w - 20
+        y = sh - h - 60
+        self.geometry(f"{w}x{h}+{x}+{y}")
+
+    def show_popup(self):
+        """Show the popup window positioned near the system tray."""
+        self._position_popup()
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+
+    # ------------------------------------------------------------------
     # Event handlers
     # ------------------------------------------------------------------
 
@@ -526,7 +553,21 @@ class MainWindow(QMainWindow):
         """Thread-safe status update via QTimer.singleShot."""
         QTimer.singleShot(0, lambda s=new_status: self._refresh_display(s))
 
-    def _open_settings(self):
+    def _on_focus_out(self, _event):
+        """Schedule a check to auto-hide when focus leaves the application."""
+        if self._hide_check_id is not None:
+            self.after_cancel(self._hide_check_id)
+        self._hide_check_id = self.after(200, self._check_focus_and_hide)
+
+    def _check_focus_and_hide(self):
+        """Hide the popup if no widget in this application has focus."""
+        self._hide_check_id = None
+        if not self.winfo_ismapped():
+            return
+        if self.focus_get() is None:
+            self.withdraw()
+
+    def _open_settings(self, _event=None):
         from cloudflare_warp.ui.settings_dialog import SettingsDialog
         dlg = SettingsDialog(self, self._svc, self._cfg)
         dlg.exec()

@@ -28,7 +28,6 @@ class App:
         self._svc.refresh_status()
 
         # Main window
-        start_min = self._cfg.get("start_minimized", False)
         self._window = MainWindow(self._svc, self._cfg)
 
         # System tray
@@ -39,10 +38,8 @@ class App:
         )
         self._tray.start()
 
-        if start_min:
-            self._window.hide()
-        else:
-            self._window.show()
+        # Popup behaviour: always start hidden; tray icon click reveals the window
+        self._window.withdraw()
 
         # Enter the Qt event loop
         sys.exit(self._qt_app.exec())
@@ -53,9 +50,7 @@ class App:
 
     def _show_window(self):
         if self._window:
-            QTimer.singleShot(0, self._window.show)
-            QTimer.singleShot(0, self._window.raise_)
-            QTimer.singleShot(0, self._window.activateWindow)
+            self._window.after(0, self._window.show_popup)
 
     def _quit(self):
         if self._tray:
